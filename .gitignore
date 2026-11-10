@@ -1,0 +1,17 @@
+node_modules/
+test-results/
+playwright-report/
+*.log
+dist/
+.firebase/
+.env
+.env.*
+!.env.example
+*-backup*.json
+*백업*.json
+*service-account*.json
+*serviceAccount*.json
+firebase-debug.*
+firestore-debug.*
+artifacts/
+.publish/

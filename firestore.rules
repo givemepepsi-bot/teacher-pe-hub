@@ -1,0 +1,47 @@
+// Prototype security rules for private teacher-owned workspace snapshots.
+// Data model: /teacherWorkspaces/{uid}, one document per Google account.
+// Required fields: ownerId (immutable path UID, 1..128), schemaVersion (1),
+// revision (positive int, increases exactly 1), generation (immutable UUID), payload (opaque JSON string,
+// maximum 750000; app validates the complete backup schema before use),
+// createdAt (immutable server timestamp), updatedAt (server timestamp).
+// No emails, account names, roles, lists, public profiles or permission arrays.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.firebase.sign_in_provider == 'google.com';
+    }
+    function isOwner(uid) { return isAuthenticated() && request.auth.uid == uid; }
+    function isValidWorkspace(uid) {
+      let d = request.resource.data;
+      return d.keys().hasAll(['ownerId','schemaVersion','revision','generation','payload','createdAt','updatedAt'])
+        && d.keys().hasOnly(['ownerId','schemaVersion','revision','generation','payload','createdAt','updatedAt'])
+        && d.ownerId is string && d.ownerId.size() > 0 && d.ownerId.size() <= 128
+        && d.ownerId == uid && d.ownerId == request.auth.uid
+        && d.schemaVersion is int && d.schemaVersion == 1
+        && d.revision is int && d.revision > 0 && d.revision < 2147483647
+        && d.generation is string && d.generation.size() > 0 && d.generation.size() <= 128
+        && d.generation.matches('^[A-Za-z0-9_-]+$')
+        && d.payload is string && d.payload.size() > 0 && d.payload.size() <= 750000
+        && d.createdAt is timestamp && d.updatedAt is timestamp
+        && d.updatedAt == request.time;
+    }
+    function uidNotModified() { return request.resource.data.ownerId == resource.data.ownerId; }
+    match /teacherWorkspaces/{uid} {
+      allow get: if isOwner(uid);
+      allow list: if false;
+      allow create: if isOwner(uid) && isValidWorkspace(uid)
+        && request.resource.data.revision == 1
+        && request.resource.data.createdAt == request.time;
+      allow update: if isOwner(uid) && resource.data.ownerId == uid
+        && uidNotModified() && isValidWorkspace(uid)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.generation == resource.data.generation
+        && request.resource.data.revision == resource.data.revision + 1;
+      allow delete: if isOwner(uid) && resource.data.ownerId == uid;
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

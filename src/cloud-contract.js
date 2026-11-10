@@ -1,0 +1,6 @@
+import {backup,parseBackup} from './domain.js';
+export const MAX_PAYLOAD_BYTES=750000;
+export function workspacePath(uid){if(typeof uid!=='string'||!uid||uid.length>128||!/[A-Za-z0-9]/.test(uid)||!/^[A-Za-z0-9_-]+$/.test(uid))throw Error('로그인 사용자 ID가 올바르지 않습니다.');return `teacherWorkspaces/${uid}`;}
+export function encodeWorkspace(data){const validated=parseBackup(JSON.stringify(backup(data)));const payload=JSON.stringify(backup(validated));if(new TextEncoder().encode(payload).length>MAX_PAYLOAD_BYTES)throw Error('클라우드 기록이 750KB를 초과했습니다. JSON으로 백업하고 기록을 정리해 주세요.');return {payload};}
+export function decodeWorkspace(raw,uid){workspacePath(uid);if(raw?.ownerId!==uid)throw Error('클라우드 기록 소유자가 일치하지 않습니다.');if(!Number.isSafeInteger(raw.revision)||raw.revision<1)throw Error('클라우드 revision 버전 오류');if(typeof raw.generation!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(raw.generation))throw Error('클라우드 기록 세대 오류');if(typeof raw.payload!=='string'||new TextEncoder().encode(raw.payload).length>MAX_PAYLOAD_BYTES)throw Error('클라우드 기록 크기 오류');return {data:parseBackup(raw.payload),revision:raw.revision,generation:raw.generation};}
+export function verifyCloudVersion(current,expectedRevision,expectedGeneration){if((current?.revision??0)!==expectedRevision||(current?.generation??null)!==expectedGeneration)throw Error('다른 기기에서 기록이 변경되었습니다. 입력을 복사한 뒤 클라우드를 다시 불러와 주세요.');}
